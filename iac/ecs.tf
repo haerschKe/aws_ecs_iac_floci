@@ -4,7 +4,7 @@ resource "aws_ecs_cluster" "main" {
 
 resource "aws_security_group" "ecs_service" {
   name        = "${var.project_name}-sg"
-  description = "Erlaubt eingehenden Traffic zum FastAPI Dummy-Service"
+  description = "Allow incoming traffic to the FastAPI dummy service"
   vpc_id      = aws_vpc.main.id
 
   ingress {
@@ -16,7 +16,7 @@ resource "aws_security_group" "ecs_service" {
   }
 
   egress {
-    description = "Alles erlaubt (z.B. ECR-Pull, CloudWatch-Logs)"
+    description = "Allow all outbound traffic (e.g., ECR pull, CloudWatch logs)"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
