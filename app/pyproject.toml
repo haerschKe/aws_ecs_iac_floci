@@ -1,0 +1,12 @@
+[project]
+name = "fastapi-dummy"
+version = "0.1.0"
+description = "Dummy FastAPI Service for Floci ECS Fargate Setup"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi==0.115.0",
+    "uvicorn[standard]==0.32.0",
+]
+
+[tool.uv]
+package = false
