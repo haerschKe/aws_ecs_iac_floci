@@ -16,7 +16,7 @@ resource "aws_internet_gateway" "main" {
   }
 }
 
-# Zwei öffentliche Subnets über zwei AZs für den Multi-AZ-Betrieb des ECS Service
+# 2 public subnets over 2 AZs for the Multi-AZ operation of the ECS service
 resource "aws_subnet" "public" {
   count = length(var.public_subnet_cidrs)
 

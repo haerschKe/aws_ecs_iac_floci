@@ -33,3 +33,33 @@ variable "availability_zones" {
   type        = list(string)
   default     = ["us-east-1a", "us-east-1b"]
 }
+
+variable "container_port" {
+  description = "Port, for the fastapi dummy service."
+  type        = number
+  default     = 8000
+}
+
+variable "container_image_tag" {
+  description = "Image-Tag, of the ecs task image."
+  type        = string
+  default     = "latest"
+}
+
+variable "task_cpu" {
+  description = "Fargate Task CPU-Units."
+  type        = number
+  default     = 256
+}
+
+variable "task_memory" {
+  description = "Fargate Task Memory in MB."
+  type        = number
+  default     = 512
+}
+
+variable "desired_count" {
+  description = "Number of running Fargate tasks in the ECS service."
+  type        = number
+  default     = 2
+}
