@@ -4,7 +4,7 @@ Floci and Terraform based simple ECS-Fargate Setup with own VPC, ECR-Repository 
 [Floci](https://floci.io) is a local emulator for AWS services, created as a drop-in replacement for LocalStack without auth tokens, without an account, and without restrictions. Unlike pure mocking tools, Floci uses real backends for many services (e.g., a real PostgreSQL/MySQL instance for RDS, real Redis for ElastiCache, real Docker containers for Lambda/ECS), allowing infrastructure code like Terraform to be tested realistically and at no cost before deploying it against real AWS.
 
 ## Prerequisites
-- Flici
+- Floci
 - Terraform
 - Docker
 - AWS CLI v2
