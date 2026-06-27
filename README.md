@@ -88,7 +88,7 @@ docker push "${REPO_URL}:latest"
 
 ### 3. Create the remaining (complete) infrastructure
 ```bash
-cd terraform
+cd iac
 terraform init
 terraform apply
 ```
