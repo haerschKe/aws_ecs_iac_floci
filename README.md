@@ -217,3 +217,55 @@ terraform destroy
    └───────────┘
 ```
 
+Explanation of the components in the order in which the components actually engage with each other when a task starts.
+
+### 1. Network layer (`vpc.tf`)
+**`aws_vpc`** is the isolated network environment for the entire setup. A dedicated VPC instead of the default VPC (clean separation, reproducible via Terraform, not dependent on Floci's automatically seeded default VPC).
+
+**`aws_subnet` (2×, across 2 AZs)** – ECS Fargate services with `awsvpc` networking need at least one subnet per task; two subnets across two AZs are needed so the 2 desired Fargate tasks can actually be distributed across different Availability Zones (multi-AZ redundancy – if one AZ goes down, the second task keeps running).
+
+**`aws_internet_gateway`** – without an IGW, the VPC has no connection to the outside world. Necessary so tasks could (in theory) pull images from real registries, and so `assign_public_ip` has any meaning at all.
+
+**`aws_route_table` + `aws_route_table_association`** – the subnets are only "public" because their route table has a `0.0.0.0/0` entry pointing to the IGW. Without this route they would technically be private subnets, regardless of what `map_public_ip_on_launch` says.
+
+→ **How they interact:** The VPC is the container for everything else; subnets + route table + IGW together produce "public reachability." The ECS service later references exactly these subnet IDs in its `network_configuration`.
+
+### 2. Image management (`ecr.tf`)
+
+**`aws_ecr_repository`** is the storage location for the FastAPI image. It exists independently of ECS/VPC – ECR is a standalone service that's only linked to the task definition via the image URI (`${aws_ecr_repository.app.repository_url}:${var.container_image_tag}`). That's also why we could create it first using `-target`: no dependency on VPC or IAM.
+
+### 3. Identity & permissions (`iam.tf`)
+
+**`aws_iam_role.ecs_execution_role`** is assumed by the **ECS infrastructure itself** (not by the application code) in order to *start* the container: pulling the image from ECR, writing logs to CloudWatch. Hence the `AmazonECSTaskExecutionRolePolicy`.
+
+**`aws_iam_role.ecs_task_role`** is assumed by the **running container code**, in case the FastAPI service itself were to call AWS APIs (S3, DynamoDB, etc.). Currently without any policy, since the dummy service doesn't do anything like that – but deliberately set up as a separate role so we can later add permissions for the application code without loosening the execution permissions (principle of least privilege: two roles instead of one "do-everything" role).
+
+Both roles trust the same trust-relationship document (`ecs-tasks.amazonaws.com` is allowed to assume them) – that's the standard mechanism through which ECS is authorized to act on behalf of these roles in the first place.
+
+### 4. Compute layer (`ecs.tf`)
+
+**`aws_ecs_cluster`** is initially just a logical namespace/grouping – with Fargate (unlike the EC2 launch type), the cluster doesn't manage its own servers, it only groups services/tasks.
+
+**`aws_cloudwatch_log_group`** exists *before* the task definition, because the task definition's `logConfiguration` block already references the log group's name – the order matters here (Terraform resolves this correctly and automatically via the resource reference).
+
+**`aws_ecs_task_definition`** is the actual "blueprint": which image, how much CPU/memory, which port, which two IAM roles, where the logs go. `requires_compatibilities = ["FARGATE"]` + `network_mode = "awsvpc"` are not arbitrary here, but a mandatory combination – Fargate *requires* `awsvpc` networking (unlike the EC2 launch type, which also allows `bridge`/`host`).
+
+**`aws_ecs_service`** is the component that ensures the task definition is actually kept running persistently (`desired_count = 2`) – if a task dies, the service automatically starts a new one. The `network_configuration` block is the bridge to the network layer: it tells the service which subnets (from `vpc.tf`) and which security group the tasks should get their ENI from.
+
+**`aws_security_group`** acts directly on this ENI (Elastic Network Interface) – it's the firewall layer between "the internet" and the container, not between "the VPC" and the container. Inbound only port 8000 (the FastAPI port), outbound everything (so that the execution-role mechanism for ECR pulls and CloudWatch logs works – both technically run over egress traffic).
+
+### 5. Outputs (`outputs.tf`)
+
+Pure convenience layer: the ECR URL, cluster/service name, and VPC/subnet IDs are exported so the README workflow commands (pushing the image, updating the service, inspecting tasks) can pick them up via `terraform output` instead of hardcoding them.
+
+### How it all comes together
+
+When we run `terraform apply` and the service spins up, roughly the following happens:
+
+1. The ECS service sees: "I'm supposed to have 2 tasks of the current task definition running"
+2. For each task: ECS uses the **execution role** to pull the image from the **ECR URL** referenced in the task definition
+3. ECS creates a network interface in one of the two **subnets** (round-robin across the AZs) and attaches the **security group** to it
+4. The container starts with the **task role** for its own API calls (unused here) and writes logs to the **CloudWatch log group** (again via the execution role)
+5. Since the subnet + route table + IGW form a public route and `assign_public_ip = true` is set, the task would be assigned a public IP in real AWS
+
+Each component therefore has a clearly scoped responsibility (network / identity / image / runtime definition / runtime control).
