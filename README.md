@@ -198,6 +198,8 @@ terraform destroy
   `load_balancer { }` block in `aws_ecs_service`.
 
 ## Overview
+This is the most simple setup for local testing but not suitable for a production setup (see [Production Setup](#production-setup)).
+
 ```bash
 ┌────────────────────────────────────────────-─┐
 │  VPC (10.0.0.0/16)                           │
@@ -269,3 +271,37 @@ When we run `terraform apply` and the service spins up, roughly the following ha
 5. Since the subnet + route table + IGW form a public route and `assign_public_ip = true` is set, the task would be assigned a public IP in real AWS
 
 Each component therefore has a clearly scoped responsibility (network / identity / image / runtime definition / runtime control).
+
+
+## Production Setup
+Using two public subnets works fine for local testing, but is not
+suitable for production for several reasons:
+
+- **Direct internet exposure** – every Fargate task gets its own public
+IP with `assign_public_ip = true`, protected only by a security group.
+A single misconfiguration exposes the container directly to the
+internet, with no additional layer (WAF, ALB) to catch it.
+
+- **No central control point** – without an ALB or API Gateway in front,
+there's no central place for TLS termination, WAF, rate limiting, DDoS
+protection, or consistent access logging.
+
+- **Cost** – AWS charges for every public IPv4
+address. With Auto Scaling, this cost grows
+linearly with every new task, whereas an ALB only ever needs 1-2 public
+IPs regardless of how many tasks run behind it.
+
+- **No load balancing, no stable address** – each task has its own IP
+that changes on every restart. Without an ALB there's no stable DNS
+address, no traffic distribution across tasks, and no health checks to
+remove a failing task from rotation.
+
+- **Deployments & compliance** – rolling updates and blue/green
+deployments require ALB target group health checks and connection
+draining to work cleanly.
+
+This requires adding private subnets, a NAT Gateway (costs) or VPC Endpoint (no costs for aws internal services), `aws_lb`, `aws_lb_target_group`, and `aws_lb_listener`.
+
+The NAT Gateway sits in the public subnet and handles exclusively outbound (egress) traffic from the private subnets — not inbound. Tasks in private subnets have no public IP of their own, so the NAT Gateway masquerades their private IP as its own public IP when they need to reach the internet (e.g. for ECR pulls, CloudWatch logs, or external APIs).
+As an alternative, VPC Endpoints (PrivateLink) route traffic to AWS-internal services like ECR and CloudWatch directly over the internal AWS network — no NAT Gateway needed for those cases. For third-party APIs, a NAT Gateway remains necessary.
+
