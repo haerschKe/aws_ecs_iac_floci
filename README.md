@@ -300,8 +300,7 @@ remove a failing task from rotation.
 deployments require ALB target group health checks and connection
 draining to work cleanly.
 
-This requires adding private subnets, a NAT Gateway (costs) or VPC Endpoint (no costs for aws internal services), `aws_lb`, `aws_lb_target_group`, and
-`aws_lb_listener`.
+This requires adding private subnets, a NAT Gateway (costs) or VPC Endpoint (no costs for aws internal services), `aws_lb`, `aws_lb_target_group`, and `aws_lb_listener`.
 
 The NAT Gateway sits in the public subnet and handles exclusively outbound (egress) traffic from the private subnets — not inbound. Tasks in private subnets have no public IP of their own, so the NAT Gateway masquerades their private IP as its own public IP when they need to reach the internet (e.g. for ECR pulls, CloudWatch logs, or external APIs).
 As an alternative, VPC Endpoints (PrivateLink) route traffic to AWS-internal services like ECR and CloudWatch directly over the internal AWS network — no NAT Gateway needed for those cases. For third-party APIs, a NAT Gateway remains necessary.
